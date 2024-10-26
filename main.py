@@ -1,5 +1,7 @@
 #!/usr/bin/micropython
 
+# Based on https://gist.github.com/neomanic/353727073989c5bacd9a11223ba405c3
+
 # See https://docs.micropython.org/en/latest/reference/isr_rules.html#the-emergency-exception-buffer
 import micropython
 micropython.alloc_emergency_exception_buf(100)
@@ -47,10 +49,6 @@ watermeter_count {PULSES}
 
     conn.close()
 
-#def irq(pin):
-#    micropython.schedule(print_pulse, 0)
-
-#p2 = Pin(13, Pin.IN, Pin.PULL_UP)
 #p2.irq(irq, Pin.IRQ_FALLING)
 
 while True:
