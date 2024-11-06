@@ -6,50 +6,69 @@
 import micropython
 micropython.alloc_emergency_exception_buf(100)
 
-from machine import Pin
+import machine
 import picozero
 import network
 import socket
+import time
 
 import secrets
+import sentry
 
-wlan = network.WLAN(network.STA_IF)
-wlan.active(True)
-wlan.connect(secrets.WIFI_SSID, secrets.WIFI_PASSWORD)
-
-LED = Pin(25, Pin.OUT)
-LED.on() # Turn on the onboard LED
+SENTRY_CLIENT = sentry.SentryClient(secrets.SENTRY_INGEST, secrets.SENTRY_PROJECT_ID, secrets.SENTRY_KEY)
 
 PULSES = 0
 def count_pulses():
     global PULSES
     PULSES += 1
 
-switch = picozero.Switch(13, True, 0.1)
-switch.when_activated = count_pulses
+def main() -> None:
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    wlan.connect(secrets.WIFI_SSID, secrets.WIFI_PASSWORD)
 
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind(("", 80))
-s.listen()
+    led = picozero.Pin(25, machine.Pin.OUT)
+    led.on() # Turn on the onboard LED
 
-while True:
-    conn, addr = s.accept()
-    request = conn.recv(1024)
+    switch = picozero.Switch(13, True, 0.1)
+    switch.when_activated = count_pulses
 
-    conn.sendall(
-f"""HTTP/1.1 200 OK
-Content-Type: text/plain; charset=UTF-8; version=0.0.4
-Access-Control-Allow-Origin: *
-Connection: close
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("", 80))
+    s.listen()
 
-# HELP watermeter_count Total litres of water used.
-# TYPE watermeter_count counter
-watermeter_count {PULSES}
-""")
+    while True:
+        conn, addr = s.accept()
+        request = conn.recv(1024)
 
-    conn.close()
+        conn.sendall(
+    f"""HTTP/1.1 200 OK
+    Content-Type: text/plain; charset=UTF-8; version=0.0.4
+    Access-Control-Allow-Origin: *
+    Connection: close
 
-#p2.irq(irq, Pin.IRQ_FALLING)
+    # HELP watermeter_count Total litres of water used.
+    # TYPE watermeter_count counter
+    watermeter_count {PULSES}
+    """)
 
-while True:
-    pass
+        conn.close()
+
+def main_safe():
+    while True:
+        try:
+            main()
+        except KeyboardInterrupt:
+            break
+        except MemoryError as e:
+            print(SENTRY_CLIENT.send_exception(e))
+
+            machine.reset()
+        except Exception as e:
+            print(SENTRY_CLIENT.send_exception(e))
+
+            time.sleep_ms(1000)
+        except:  # noqa
+            time.sleep_ms(1000)
+
+main_safe()
